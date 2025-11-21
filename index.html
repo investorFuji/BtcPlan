@@ -27,17 +27,15 @@
     .rendering-pixelated { image-rendering: pixelated; }
   </style>
 
-  <!-- Import Map: Fixes the "Failed to resolve module specifier" error -->
+  <!-- Import Map: Fixed version conflicts -->
   <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "react-dom": "https://esm.sh/react-dom@18.2.0",
-    "recharts": "https://esm.sh/recharts@2.12.3?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.358.0?external=react,react-dom",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+    "react": "https://esm.sh/react@18.2.0?dev",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?dev",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?dev",
+    "recharts": "https://esm.sh/recharts@2.12.3?external=react,react-dom&dev",
+    "lucide-react": "https://esm.sh/lucide-react@0.358.0?external=react,react-dom&dev"
   }
 }
 </script>
@@ -372,7 +370,7 @@
           <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
             <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-center md:justify-start gap-4">
               <img 
-                src="https://picsum.photos/64/64" 
+                src="logo.png" 
                 alt="Logo" 
                 className="w-10 h-10 rounded-xl shadow-sm"
               />

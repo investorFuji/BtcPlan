@@ -1,337 +1,760 @@
-
 <!doctype html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>通膨 vs. 投資利息 計算器 · 富士版</title>
+  <title>Investor Fuji · 通膨 vs. 投資利息 計算器</title>
+  <meta name="description" content="輸入生活費與通膨、投入本金與年化，找出「利息 ≥ 當年生活費」的年份。">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Babel for in-browser JSX transformation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  
   <style>
-    :root{--bg:#f8fafc;--card:#ffffff;--text:#0f172a;--muted:#64748b;--accent:#0ea5e9;--ok:#10b981;--bad:#ef4444;--ring:#e2e8f0}
-    *{box-sizing:border-box} body{margin:0;background:linear-gradient(#f8fafc,#fff);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,'Apple Color Emoji','Segoe UI Emoji';color:var(--text)}
-    .container{max-width:1080px;margin:24px auto;padding:0 16px}
-    .title{font-weight:800;letter-spacing:-.02em}
-    .sub{color:var(--muted)}
-    .grid{display:grid;gap:16px}
-    @media(min-width:900px){.grid-4{grid-template-columns:repeat(4,1fr)}.grid-3{grid-template-columns:repeat(3,1fr)}.grid-2{grid-template-columns:repeat(2,1fr)}}
-    .card{background:var(--card);border:1px solid var(--ring);border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
-    .card .content{padding:16px}
-    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select{width:100%;padding:10px 12px;border:1px solid var(--ring);border-radius:10px;font-size:14px;background:#fff}
-    .stat{font-weight:800;font-size:24px}
-    table{width:100%;border-collapse:collapse;font-size:12px}
-    th,td{text-align:left;padding:8px 10px;border-bottom:1px dashed #e5e7eb}
-    tr.hit{background:rgba(16,185,129,.08)}
-    .row{display:flex;align-items:center;gap:8px}
-    .muted{color:var(--muted);font-size:12px}
-    .right{text-align:right}
-    .btn{padding:10px 12px;border-radius:10px;border:1px solid var(--ring);background:#fff;cursor:pointer}
-    .btn-primary{background:var(--text);color:#fff;border-color:var(--text)}
-    .pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px}
-    .footer{color:var(--muted);font-size:12px;line-height:1.6;margin:10px 0 30px}
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .rendering-pixelated { image-rendering: pixelated; }
   </style>
+
+  <!-- Import Map: 統一管理依賴版本，解決 "Failed to resolve module specifier" 錯誤 -->
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "recharts": "https://esm.sh/recharts@2.12.2?external=react,react-dom",
+    "lucide-react": "https://esm.sh/lucide-react@0.358.0?external=react,react-dom",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
 </head>
-<body>
-  <!-- ===== 顶部品牌招牌 / Investor Fuji ===== -->
-<header style="
-  display:flex; align-items:center; justify-content:center; gap:14px;
-  padding:20px 16px; margin-bottom:8px;
-">
-  <a href="./" style="display:inline-flex; align-items:center; gap:12px; text-decoration:none;">
-    <!-- 換成你的檔名：logo.png 或 150x150.png -->
-    <img src="logo.png" alt="Investor Fuji" 
-         style="width:56px;height:56px;border-radius:12px;object-fit:cover;">
-    <div style="line-height:1">
-      <div style="font-weight:800;font-size:1.25rem;color:#0f172a;letter-spacing:-.01em">
-        Investor Fuji
-      </div>
-      <div style="font-size:.9rem;color:#64748b">通膨 vs. 投資利息 · 工具原型</div>
-    </div>
-  </a>
-</header>
+<body class="bg-slate-50 text-slate-900">
+  <div id="root"></div>
 
+  <!-- Application Logic -->
+  <script type="text/babel" data-type="module">
+    import React, { useState, useMemo } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+    import { Download, TrendingUp, ArrowRight, Coins, Wallet, AlertCircle, Zap, Copy, Check } from 'lucide-react';
 
-<!-- 加這行讓下面內容不被蓋住 -->
-<div style="height:80px;"></div>
-
-  <div class="container">
-    <div class="row" style="justify-content:space-between;margin-bottom:8px">
-      <div>
-        <div class="title" style="font-size:28px">通膨 vs. 投資利息 計算器</div>
-        <div class="sub">輸入生活費與通膨、投入本金與年化，找出「利息 ≥ 當年生活費」的年份。</div>
-      </div>
-      <div class="muted">Investor Fuji · 工具原型</div>
-    </div>
-
-    <div class="grid grid-4">
-      <div class="card"><div class="content">
-        <label>目前年齡</label>
-        <input id="age" type="number" value="30">
-      </div></div>
-      <div class="card"><div class="content">
-        <label>試算年數</label>
-        <input id="horizon" type="number" value="25">
-      </div></div>
-      <div class="card"><div class="content">
-        <label>輸入資金模式</label>
-        <select id="mode">
-          <option value="BTC">以 BTC 數量 + 價格</option>
-          <option value="TWD">以台幣金額</option>
-        </select>
-      </div></div>
-      <div class="card"><div class="content">
-        <label>年化報酬率（%）</label>
-        <input id="returnPct" type="number" step="0.1" value="15">
-      </div></div>
-    </div>
-
-    <div class="grid grid-3" style="margin-top:16px">
-      <div class="card"><div class="content">
-        <label>目前年生活費（TWD）</label>
-        <input id="expenseNow" value="100000">
-      </div></div>
-      <div class="card"><div class="content">
-        <label>年通膨率（%）</label>
-        <input id="inflationPct" type="number" step="0.1" value="3">
-      </div></div>
-      <div class="card"><div class="content" id="principalBlock">
-        <label>初始本金</label>
-        <div class="row">
-          <div class="pill" id="modeTag">BTC</div>
-          <div class="stat right" style="flex:1">TWD <span id="principal">-</span></div>
-        </div>
-        <div class="muted" id="hint"></div>
-      </div></div>
-    </div>
-
-    <div id="btcRow" class="grid grid-3" style="margin-top:16px">
-      <div class="card"><div class="content">
-        <label>持有 BTC 數量（顆）</label>
-        <input id="btcAmount" value="0.10">
-      </div></div>
-      <div class="card"><div class="content">
-        <label>BTC 單價（TWD/顆）</label>
-        <input id="btcPriceTWD" value="3000000">
-      </div></div>
-      <div class="card"><div class="content">
-        <label>（自動計算）</label>
-        <div class="muted">依「顆數 × 單價」換算初始本金</div>
-      </div></div>
-    </div>
-
-    <div id="twdRow" class="grid grid-3" style="margin-top:16px;display:none">
-      <div class="card"><div class="content">
-        <label>初始投入金額（TWD）</label>
-        <input id="initialTWD" value="600000">
-      </div></div>
-    </div>
-
-    <div class="grid grid-3" style="margin-top:16px">
-      <div class="card"><div class="content">
-        <div class="muted">突破年份（年利息 ≥ 當年生活費）</div>
-        <div class="stat" id="breakYear">—</div>
-        <div class="muted" id="breakDetail"></div>
-      </div></div>
-      <div class="card"><div class="content">
-        <div class="muted">第 1 年參考</div>
-        <div id="firstYear"></div>
-      </div></div>
-      <div class="card"><div class="content">
-        <button class="btn btn-primary" id="exportBtn">匯出 CSV 明細</button>
-      </div></div>
-    </div>
-
-    <div class="card" style="margin-top:16px">
-      <div class="content">
-        <div style="height:380px"><canvas id="chart"></canvas></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:16px">
-      <div class="content" style="overflow:auto">
-        <table id="table">
-          <thead>
-            <tr>
-              <th>年</th><th>年齡</th><th>年利息（TWD）</th><th>當年生活費（TWD）</th><th>期末資產（TWD）</th><th>差額（利息-生活費）</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="footer">
-      <b>說明</b>：利息＝期初資產×年化報酬率；生活費＝現在生活費×(1+通膨)^(年數-1)；突破年份為第一次滿足「年利息 ≥ 當年生活費」。本工具為教育試算，未含稅務、費用、風險與價格波動。
-    </div>
-  </div>
-
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script>
-    const $ = (id) => document.getElementById(id);
-    const num = (v, fb=0) => {
-      if (typeof v === 'number') return v;
-      const n = Number(String(v||'').replace(/[,\s]/g,''));
-      return Number.isFinite(n) ? n : fb;
+    // --- Types (Enum simulation for JS) ---
+    const InputMode = {
+      BTC: 'BTC',
+      TWD: 'TWD'
     };
-    const fmt = (n) => Number(n||0).toLocaleString('zh-TW', {maximumFractionDigits:0});
 
-    const inputs = ['age','horizon','expenseNow','inflationPct','returnPct','btcAmount','btcPriceTWD','initialTWD','mode'];
-    inputs.forEach(id => $(id).addEventListener('input', refresh));
-    $('mode').addEventListener('change', () => {
-      const m = $('mode').value;
-      $('btcRow').style.display = m==='BTC' ? '' : 'none';
-      $('twdRow').style.display = m==='TWD' ? '' : 'none';
-      $('modeTag').textContent = m;
-      refresh();
-    });
+    // --- Components: ResultChart ---
+    const ResultChart = ({ data }) => {
+      const formatCurrency = (value) => {
+        if (value >= 10000) {
+          return `${(value / 10000).toFixed(0)}萬`;
+        }
+        return value.toString();
+      };
 
-    let chart;
-    function refresh() {
-      const age = num($('age').value, 30);
-      const horizon = Math.max(1, num($('horizon').value, 25));
-      const expenseNow = num($('expenseNow').value, 100000);
-      const i = num($('inflationPct').value, 3) / 100;
-      const r = num($('returnPct').value, 15) / 100;
-      const mode = $('mode').value;
+      return (
+        <div className="w-full h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={data}
+              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis 
+                dataKey="year" 
+                label={{ value: '年數', position: 'insideBottomRight', offset: -5 }} 
+                tick={{fontSize: 12}}
+              />
+              <YAxis 
+                tickFormatter={formatCurrency} 
+                tick={{fontSize: 12}}
+                width={60}
+              />
+              <Tooltip 
+                formatter={(value) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(value)}
+                labelFormatter={(label) => `第 ${label} 年`}
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+              />
+              <Legend verticalAlign="top" height={36} />
+              <Line
+                type="monotone"
+                dataKey="interest"
+                name="年利息 (收入)"
+                stroke="#0ea5e9"
+                strokeWidth={3}
+                dot={false}
+                activeDot={{ r: 8 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="expense"
+                name="當年生活費 (支出)"
+                stroke="#ef4444"
+                strokeWidth={3}
+                strokeDasharray="5 5"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    };
 
-      const principalTWD = mode==='BTC'
-        ? num($('btcAmount').value, 0.1) * num($('btcPriceTWD').value, 3000000)
-        : num($('initialTWD').value, 600000);
+    // --- Components: DonationSection ---
+    const DonationSection = () => {
+      const [copied, setCopied] = useState(false);
+      const address = "TRrveGuEdkq9v64ecmgfyQp3eh1dRuyEYM";
 
-      $('principal').textContent = fmt(principalTWD);
-      $('hint').textContent = mode==='BTC' ? '顆數 × 單價 自動換算' : '可直接輸入台幣金額';
+      const handleCopy = () => {
+        navigator.clipboard.writeText(address).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(err => {
+          console.error('Failed to copy: ', err);
+        });
+      };
 
-      let valuePrev = principalTWD;
-      const rows = [];
-      for (let year=1; year<=horizon; year++) {
-        const interest = valuePrev * r;
-        const valueEnd = valuePrev + interest;
-        const expense = expenseNow * Math.pow(1+i, year-1);
-        rows.push({year, age: age+year, interest, expense, valueEnd, diff: interest - expense});
-        valuePrev = valueEnd;
-      }
+      return (
+        <section className="mt-16 py-12 px-6 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl text-white shadow-2xl text-center relative overflow-hidden isolate group">
+          {/* Decorative ambient glow */}
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl group-hover:bg-emerald-500/30 transition-all duration-1000"></div>
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl group-hover:bg-blue-600/30 transition-all duration-1000"></div>
 
-      // Break-even
-      const be = rows.find(d => d.interest >= d.expense);
-      $('breakYear').textContent = be ? `第 ${be.year} 年（${be.age} 歲）` : '尚未在期間內達成';
-      $('breakDetail').textContent = be ? `當年利息 TWD ${fmt(be.interest)} · 生活費 TWD ${fmt(be.expense)}` : '';
+          <div className="relative z-10 flex flex-col items-center max-w-lg mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-emerald-300 text-xs font-bold tracking-wider uppercase mb-6 backdrop-blur-sm">
+              <Zap size={12} fill="currentColor" />
+              Support Development
+            </div>
 
-      // First year
-      if (rows[0]) {
-        const d0 = rows[0];
-        $('firstYear').innerHTML = `
-          <div>利息：<b>TWD ${fmt(d0.interest)}</b></div>
-          <div>生活費：<b>TWD ${fmt(d0.expense)}</b></div>
-          <div style="color:${d0.diff>=0?'#059669':'#dc2626'}">差額：${d0.diff>=0?'+':''}${fmt(d0.diff)}</div>
-        `;
-      }
+            <h2 className="mb-3 text-2xl md:text-3xl font-bold tracking-tight text-white">
+              覺得這個工具有幫助嗎？
+            </h2>
+            <p className="mb-8 text-slate-400 text-sm md:text-base leading-relaxed">
+              您的打賞將成為開發者的燃料 ⛽️<br/>
+              幫助我持續維護並開發更多免費的投資試算工具。
+            </p>
 
-      // Table
-      const tb = $('table').querySelector('tbody');
-      tb.innerHTML = '';
-      rows.forEach(row => {
-        const tr = document.createElement('tr');
-        if (row.interest >= row.expense) tr.classList.add('hit');
-        tr.innerHTML = `
-          <td>${row.year}</td>
-          <td>${row.age}</td>
-          <td>${fmt(row.interest)}</td>
-          <td>${fmt(row.expense)}</td>
-          <td>${fmt(row.valueEnd)}</td>
-          <td style="color:${row.diff>=0?'#065f46':'#b91c1c'}">${row.diff>=0?'+':''}${fmt(row.diff)}</td>
-        `;
-        tb.appendChild(tr);
+            {/* Crypto Card */}
+            <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-2xl transform transition-all hover:scale-[1.01] duration-300">
+              <div className="bg-slate-900/80 rounded-xl p-6 border border-white/5">
+                <div className="flex flex-col items-center">
+                  
+                  {/* Header */}
+                  <div className="flex items-center gap-2 text-slate-300 font-semibold mb-6">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                      <Wallet size={16} />
+                    </div>
+                    <span>USDT Donation</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">TRC20</span>
+                  </div>
+
+                  {/* QR Code Area */}
+                  <div className="p-4 bg-white rounded-2xl shadow-lg mb-6">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=000000&margin=0`}
+                      alt="USDT TRC20 QR Code" 
+                      className="w-40 h-40 md:w-48 md:h-48 object-contain rendering-pixelated"
+                    />
+                  </div>
+
+                  {/* Address & Copy */}
+                  <div className="w-full max-w-sm space-y-2">
+                    <div className="flex justify-between text-xs text-slate-500 px-1">
+                      <span>Wallet Address (Tron Network)</span>
+                    </div>
+                    <div className="relative group/input">
+                      <div 
+                        onClick={handleCopy}
+                        className="flex items-center justify-between w-full bg-slate-950 border border-slate-800 rounded-xl p-3 pr-2 cursor-pointer hover:border-emerald-500/50 hover:bg-slate-900 transition-all duration-200 group/btn"
+                      >
+                        <code className="text-xs sm:text-sm text-slate-300 font-mono truncate select-all mr-2">
+                          {address}
+                        </code>
+                        <button
+                          className={`flex-shrink-0 p-2 rounded-lg transition-all duration-300 ${
+                            copied 
+                              ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' 
+                              : 'bg-slate-800 text-slate-400 group-hover/btn:bg-slate-700 group-hover/btn:text-white'
+                          }`}
+                        >
+                          {copied ? <Check size={16} strokeWidth={3} /> : <Copy size={16} />}
+                        </button>
+                      </div>
+                      
+                      {/* Floating Feedback Label */}
+                      <div className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg transform transition-all duration-300 flex items-center gap-1 ${copied ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+                        <Check size={12} />
+                        已複製地址
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-600 text-center mt-2">
+                      * 請務必使用 <span className="text-emerald-500/80">TRC20 (Tron)</span> 鏈進行轉帳，以免資產遺失。
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    };
+
+    // --- Main App Component ---
+    const App = () => {
+      // --- State ---
+      const [state, setState] = useState({
+        age: 30,
+        horizon: 25,
+        mode: InputMode.BTC,
+        returnPct: 15,
+        expenseNow: 100000,
+        inflationPct: 3,
+        btcAmount: 0.10,
+        btcPriceTWD: 3000000,
+        initialTWD: 600000,
+        monthlyContribution: 10000,
       });
 
-      // Chart
-      const labels = rows.map(r => 'Y'+r.year);
-      const interestData = rows.map(r => Math.round(r.interest));
-      const expenseData  = rows.map(r => Math.round(r.expense));
+      // --- Handlers ---
+      const handleChange = (field, value) => {
+        setState(prev => ({
+          ...prev,
+          [field]: typeof value === 'string' ? (Number(value) || 0) : value
+        }));
+      };
 
-      if (!chart) {
-        const ctx = $('chart').getContext('2d');
-        chart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [
-              { label: '年利息', data: interestData, tension:.25 },
-              { label: '當年生活費', data: expenseData, tension:.25 },
-            ]
-          },
-          options: {
-            responsive: true,
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-              y: { ticks: { callback: (v)=> (v/10000).toFixed(0)+'萬' } }
-            }
+      const handleModeChange = (mode) => {
+        setState(prev => ({ ...prev, mode }));
+      };
+
+      // --- Calculation Logic ---
+      const calculation = useMemo(() => {
+        const {
+          age, horizon, mode, returnPct, expenseNow,
+          inflationPct, btcAmount, btcPriceTWD,
+          initialTWD, monthlyContribution
+        } = state;
+
+        const principal = mode === InputMode.BTC 
+          ? btcAmount * btcPriceTWD 
+          : initialTWD;
+        
+        const rate = returnPct / 100;
+        const inflation = inflationPct / 100;
+
+        const rows = [];
+        let breakEvenRow = null;
+
+        if (mode === InputMode.BTC) {
+          let currentBtc = btcAmount;
+          let currentPrice = btcPriceTWD;
+
+          for (let year = 1; year <= horizon; year++) {
+            const startPrice = currentPrice;
+            const endPrice = startPrice * (1 + rate);
+            
+            // Simplified DCA: Treat monthly contributions as if they were invested at start of year
+            const totalAnnualContribution = monthlyContribution * 12;
+            const btcPurchasedThisYear = totalAnnualContribution / startPrice;
+
+            const totalBtcAfterPurchase = currentBtc + btcPurchasedThisYear;
+            const valueEnd = totalBtcAfterPurchase * endPrice;
+            const valueStart = currentBtc * startPrice; 
+            
+            const interest = valueEnd - valueStart - totalAnnualContribution;
+
+            currentBtc = totalBtcAfterPurchase;
+            currentPrice = endPrice;
+            
+            const expense = expenseNow * Math.pow(1 + inflation, year - 1);
+            const diff = interest - expense;
+            const isBreakEven = diff >= 0;
+
+            const row = {
+              year,
+              age: age + year,
+              interest,
+              expense,
+              valueEnd,
+              diff,
+              isBreakEven,
+              btcHoldings: currentBtc
+            };
+            
+            rows.push(row);
+            if (isBreakEven && !breakEvenRow) breakEvenRow = row;
           }
-        });
-      } else {
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = interestData;
-        chart.data.datasets[1].data = expenseData;
-        chart.update();
-      }
+        } else {
+          // TWD Mode
+          let valuePrev = principal;
+          
+          for (let year = 1; year <= horizon; year++) {
+            // Simplified DCA: (Principal + Annual Contribution) * (1 + Rate)
+            const totalAnnualContribution = monthlyContribution * 12;
+            const valueEnd = (valuePrev + totalAnnualContribution) * (1 + rate);
+            
+            const interest = valueEnd - valuePrev - totalAnnualContribution;
+            
+            const expense = expenseNow * Math.pow(1 + inflation, year - 1);
+            const diff = interest - expense;
+            const isBreakEven = diff >= 0;
 
-      // CSV export
-      $('exportBtn').onclick = () => {
-        const header = ['year','age','interest','expense','valueEnd','diff'];
-        const lines = [header.join(',')].concat(rows.map(r => [r.year,r.age,Math.round(r.interest),Math.round(r.expense),Math.round(r.valueEnd),Math.round(r.diff)].join(',')));
-        const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+            const row = {
+              year,
+              age: age + year,
+              interest,
+              expense,
+              valueEnd,
+              diff,
+              isBreakEven
+            };
+
+            rows.push(row);
+            valuePrev = valueEnd;
+            if (isBreakEven && !breakEvenRow) breakEvenRow = row;
+          }
+        }
+
+        return { principal, rows, breakEvenRow };
+      }, [state]);
+
+      // --- Formatters ---
+      const fmt = (n) => new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 }).format(n);
+      const fmtBtc = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+
+      // --- Export CSV ---
+      const handleExport = () => {
+        const isBtc = state.mode === InputMode.BTC;
+        const header = ['年', '年齡', '年利息(TWD)', '當年生活費(TWD)', '期末資產(TWD)', '差額'];
+        if (isBtc) header.splice(2, 0, '持有BTC(顆)');
+
+        const csvContent = [
+          header.join(','),
+          ...calculation.rows.map(r => {
+            const base = [r.year, r.age];
+            if (isBtc) base.push(r.btcHoldings?.toFixed(4) || '0');
+            base.push(Math.round(r.interest).toString());
+            base.push(Math.round(r.expense).toString());
+            base.push(Math.round(r.valueEnd).toString());
+            base.push(Math.round(r.diff).toString());
+            return base.join(',');
+          })
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = '富士計算器.csv'; a.click();
+        a.href = url;
+        a.download = 'Investor_Fuji_Calculation.csv';
+        a.click();
         URL.revokeObjectURL(url);
       };
-    }
 
-    refresh();
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Header */}
+          <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+            <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-center md:justify-start gap-4">
+              <img 
+                src="https://picsum.photos/64/64" 
+                alt="Logo" 
+                className="w-10 h-10 rounded-xl shadow-sm"
+              />
+              <div>
+                <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                  Investor Fuji
+                </h1>
+                <p className="text-xs text-slate-500 font-medium">通膨 vs. 投資利息 · 工具原型</p>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
+            
+            {/* Hero Title */}
+            <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <h2 className="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">
+                  通膨 vs. 投資利息 計算器
+                </h2>
+                <p className="text-slate-600 max-w-2xl">
+                  輸入生活費與通膨、投入本金與年化，找出「利息 ≥ 當年生活費」的年份。
+                </p>
+              </div>
+              <div className="text-xs font-medium text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                Ver 2.3 Simple Annual Calc
+              </div>
+            </div>
+
+            {/* Input Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {/* Age */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">目前年齡</label>
+                <input 
+                  type="number" 
+                  value={state.age}
+                  onChange={(e) => handleChange('age', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                />
+              </div>
+
+              {/* Horizon */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">試算年數</label>
+                <input 
+                  type="number" 
+                  value={state.horizon}
+                  onChange={(e) => handleChange('horizon', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                />
+              </div>
+
+              {/* Mode */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">輸入資金模式</label>
+                <select 
+                  value={state.mode}
+                  onChange={(e) => handleModeChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900 appearance-none cursor-pointer"
+                >
+                  <option value={InputMode.BTC}>以 BTC 數量 + 價格</option>
+                  <option value={InputMode.TWD}>以台幣金額</option>
+                </select>
+              </div>
+
+              {/* Return Rate */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-4 -mt-4 z-0"></div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 relative z-10">年化報酬率 (%)</label>
+                <div className="relative z-10">
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={state.returnPct}
+                    onChange={(e) => handleChange('returnPct', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-bold text-green-700"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Financials Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {/* Expense */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">目前年生活費 (TWD)</label>
+                <input 
+                  type="number"
+                  value={state.expenseNow}
+                  onChange={(e) => handleChange('expenseNow', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                />
+              </div>
+
+              {/* Inflation */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">年通膨率 (%)</label>
+                <input 
+                  type="number"
+                  step="0.1"
+                  value={state.inflationPct}
+                  onChange={(e) => handleChange('inflationPct', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-medium text-red-600"
+                />
+              </div>
+
+              {/* Principal Calculation Display */}
+              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm text-white flex flex-col justify-between">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">初始本金 (試算)</label>
+                <div className="flex items-end justify-between">
+                  <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 font-mono">{state.mode}</span>
+                  <div className="text-2xl font-bold tracking-tight">
+                    <span className="text-sm text-slate-400 font-normal mr-1">TWD</span>
+                    {fmt(calculation.principal)}
+                  </div>
+                </div>
+                <div className="mt-2 text-[10px] text-slate-500">
+                  {state.mode === InputMode.BTC ? '依「顆數 × 單價」自動換算' : '手動輸入之金額'}
+                </div>
+              </div>
+            </div>
+
+            {/* Capital Input Section (Initial + DCA) */}
+            <h3 className="text-sm font-bold text-slate-500 mb-3 flex items-center gap-2">
+              <Wallet size={16} />
+              資金投入設定
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 animate-in fade-in slide-in-from-top-4 duration-300">
+              
+              {/* Mode Specific Initial Input */}
+              {state.mode === InputMode.BTC ? (
+                <>
+                  <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 shadow-sm">
+                    <label className="block text-xs font-semibold text-orange-800/70 uppercase tracking-wider mb-2">初始持有 BTC 數量</label>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={state.btcAmount}
+                      onChange={(e) => handleChange('btcAmount', e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all font-bold text-slate-900"
+                    />
+                  </div>
+                  <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 shadow-sm">
+                    <label className="block text-xs font-semibold text-orange-800/70 uppercase tracking-wider mb-2">BTC 單價 (TWD)</label>
+                    <input 
+                      type="number"
+                      value={state.btcPriceTWD}
+                      onChange={(e) => handleChange('btcPriceTWD', e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all font-medium text-slate-900"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">初始投入金額 (TWD)</label>
+                  <input 
+                    type="number"
+                    value={state.initialTWD}
+                    onChange={(e) => handleChange('initialTWD', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                  />
+                </div>
+              )}
+
+              {/* DCA Input */}
+              <div className="bg-sky-50 p-5 rounded-2xl border border-sky-100 shadow-sm md:col-span-2">
+                <label className="block text-xs font-semibold text-sky-700/70 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  每月定投金額 (TWD)
+                  <span className="bg-sky-200 text-sky-800 text-[10px] px-1.5 py-0.5 rounded-full">NEW</span>
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input 
+                    type="number"
+                    value={state.monthlyContribution}
+                    onChange={(e) => handleChange('monthlyContribution', e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                  />
+                  <div className="text-xs text-sky-600/60 min-w-[60px] leading-tight">
+                    {state.mode === InputMode.BTC ? '自動換算累計 BTC' : '每月持續買入'}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="border-t border-slate-200 my-8"></div>
+
+            {/* Results Summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Break Even Box */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-100 overflow-hidden relative">
+                <div className={`h-1 w-full absolute top-0 left-0 ${calculation.breakEvenRow ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                <div className="p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`p-1.5 rounded-lg ${calculation.breakEvenRow ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                      <TrendingUp size={18} />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-700">財務自由突破年份</h3>
+                  </div>
+                  
+                  {calculation.breakEvenRow ? (
+                    <>
+                      <div className="text-3xl font-extrabold text-slate-900 mb-1">
+                        第 {calculation.breakEvenRow.year} 年
+                        <span className="text-lg text-slate-500 font-medium ml-2">({calculation.breakEvenRow.age} 歲)</span>
+                      </div>
+                      <div className="space-y-1 mt-4">
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>當年利息收入 (含增值)</span>
+                          <span className="font-semibold text-emerald-600">TWD {fmt(calculation.breakEvenRow.interest)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>當年生活費</span>
+                          <span className="font-semibold text-red-500">TWD {fmt(calculation.breakEvenRow.expense)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-slate-400 py-4">
+                      <p className="text-xl font-semibold">尚未達成</p>
+                      <p className="text-sm mt-1">試著增加本金、提高報酬率或延長年限。</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Year 1 Reference */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                  第 1 年參考數據
+                </h3>
+                {calculation.rows.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                      <span className="text-sm text-slate-500">預估利息</span>
+                      <span className="text-base font-bold text-slate-900">{fmt(calculation.rows[0].interest)}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                      <span className="text-sm text-slate-500">生活費</span>
+                      <span className="text-base font-bold text-slate-900">{fmt(calculation.rows[0].expense)}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                      <span className="text-sm text-slate-500">差額</span>
+                      <span className={`text-lg font-extrabold ${calculation.rows[0].diff >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {calculation.rows[0].diff > 0 ? '+' : ''}{fmt(calculation.rows[0].diff)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Card */}
+              <div className="bg-slate-50 rounded-2xl border border-slate-200 border-dashed p-6 flex flex-col items-center justify-center text-center">
+                <div className="mb-4 text-slate-400">
+                  <Download size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-xs max-w-[200px]">下載 CSV 格式的詳細逐年數據 (含累積資產明細)</p>
+                </div>
+                <button 
+                  onClick={handleExport}
+                  className="w-full py-3 px-4 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+                >
+                  <Download size={16} />
+                  匯出 CSV 報表
+                </button>
+              </div>
+            </div>
+
+            {/* Chart Section */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-100/50 p-6 mb-8">
+              <h3 className="text-lg font-bold text-slate-800 mb-6">資產增長趨勢</h3>
+              <ResultChart data={calculation.rows} />
+            </div>
+
+            {/* Table Section */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100">
+                <h3 className="text-lg font-bold text-slate-800">詳細數據表</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-600">
+                  <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
+                    <tr>
+                      <th className="px-6 py-4">年</th>
+                      <th className="px-6 py-4">年齡</th>
+                      {state.mode === InputMode.BTC && (
+                        <th className="px-6 py-4 text-orange-600 flex items-center gap-1">
+                          <Coins size={14} />
+                          持有 BTC (顆)
+                        </th>
+                      )}
+                      <th className="px-6 py-4 text-right">年利息 (TWD)</th>
+                      <th className="px-6 py-4 text-right">當年生活費 (TWD)</th>
+                      <th className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1 group/header cursor-help">
+                          <span>期末資產 (TWD)</span>
+                          <div className="relative">
+                            <AlertCircle size={14} className="text-slate-400 hover:text-slate-600 transition-colors" />
+                            <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-slate-900 text-slate-50 text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/header:opacity-100 group-hover/header:visible transition-all z-20 font-normal text-left tracking-normal">
+                              {state.mode === InputMode.BTC ? (
+                                <div>
+                                  <div className="font-bold text-orange-300 mb-1">BTC 模式計算方式</div>
+                                  <div>總資產 ＝ (累積持有顆數) × (年末單價)</div>
+                                  <div className="mt-1 text-slate-400 border-t border-slate-700 pt-1">
+                                    為方便快速估算，假設每月定投金額於「年初一次性投入」，故整年定投總額皆享有完整的年度漲幅。
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="font-bold text-sky-300 mb-1">台幣模式計算方式</div>
+                                  <div>總資產 ＝ (上期餘額 ＋ 年定投總額) × (1 ＋ 年化報酬率)</div>
+                                  <div className="mt-1 text-slate-400 border-t border-slate-700 pt-1">
+                                    為方便快速估算，假設每月定投金額於「年初一次性投入」，故整年定投總額皆享有完整的年度複利。
+                                  </div>
+                                </div>
+                              )}
+                              <div className="absolute bottom-full right-1 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-slate-900"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-6 py-4 text-right">差額</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {calculation.rows.map((row) => (
+                      <tr 
+                        key={row.year} 
+                        className={`hover:bg-slate-50 transition-colors ${row.isBreakEven && row.year === calculation.breakEvenRow?.year ? 'bg-emerald-50/60' : ''}`}
+                      >
+                        <td className="px-6 py-4 font-medium text-slate-900">
+                          {row.year}
+                          {row.isBreakEven && row.year === calculation.breakEvenRow?.year && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                              達成
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">{row.age}</td>
+                        
+                        {state.mode === InputMode.BTC && (
+                          <td className="px-6 py-4 font-mono text-orange-600 font-semibold">
+                            {fmtBtc(row.btcHoldings || 0)}
+                          </td>
+                        )}
+
+                        <td className="px-6 py-4 text-right font-medium text-sky-600">{fmt(row.interest)}</td>
+                        <td className="px-6 py-4 text-right text-slate-500">{fmt(row.expense)}</td>
+                        <td className="px-6 py-4 text-right text-slate-900 font-medium">{fmt(row.valueEnd)}</td>
+                        <td className={`px-6 py-4 text-right font-bold ${row.diff >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {row.diff > 0 ? '+' : ''}{fmt(row.diff)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <DonationSection />
+            
+            <footer className="mt-12 text-center text-xs text-slate-400 pb-8">
+              <p className="mb-2">
+                <b>說明</b>：利息＝期末資產 - 期初資產 - 當年投入本金；生活費＝現在生活費×(1+通膨)^(年數-1)。
+              </p>
+              <p className="mb-2">
+                定投計算採用簡化算法：假設每月定投金額於「年初一次性投入」，直接享有整年完整複利。
+              </p>
+              <p>本工具為教育試算，未含稅務、費用、風險與價格波動，不構成投資建議。</p>
+              <p className="mt-4 opacity-50">© 2024 Investor Fuji</p>
+            </footer>
+
+          </main>
+        </div>
+      );
+    };
+
+    // --- Initialization ---
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
   </script>
-  <!-- 💰 打賞區塊：Investor Fuji 支持按鈕 -->
-<section style="
-  text-align:center;
-  margin-top:60px;
-  padding:40px 0;
-  background:linear-gradient(135deg,#0f172a,#1e293b);
-  border-radius:16px;
-  color:white;
-  box-shadow:0 4px 20px rgba(0,0,0,0.2);
-  ">
-  <h2 style="margin-bottom:10px;font-size:1.6rem;">覺得這個工具有幫助嗎？</h2>
-  <p style="margin-bottom:25px;font-size:1.1rem;opacity:0.9;">
-    你的打賞能幫我持續創作更多投資與理財工具 💪
-  </p>
-
-  <a href="https://buy.stripe.com/test_cNieVd2Lm5eYg4fgI5gA800"
-     target="_blank" rel="noopener"
-     style="
-       display:inline-flex;
-       align-items:center;
-       gap:8px;
-       background:white;
-       color:#0f172a;
-       font-weight:600;
-       padding:12px 24px;
-       border-radius:50px;
-       text-decoration:none;
-       font-size:1.05rem;
-       box-shadow:0 4px 12px rgba(255,255,255,0.3);
-       transition:all 0.3s ease;
-     "
-     onmouseover="this.style.background='#0f172a';this.style.color='white';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)';"
-     onmouseout="this.style.background='white';this.style.color='#0f172a';this.style.boxShadow='0 4px 12px rgba(255,255,255,0.3)';"
-  >
-    🍎 使用 Apple Pay / 信用卡 打賞 Investor Fuji
-  </a>
-
-  <p style="margin-top:20px;font-size:0.9rem;opacity:0.7;">
-    支援 Apple Pay、Google Pay 與 信用卡
-  </p>
-</section>
-
 </body>
 </html>

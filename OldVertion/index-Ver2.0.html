@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Investor Fuji · 通膨 vs. 投資利息 計算器</title>
+  <meta name="description" content="輸入生活費與通膨、投入本金與年化，找出「利息 ≥ 當年生活費」的年份。">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Babel for in-browser JSX transformation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .rendering-pixelated { image-rendering: pixelated; }
+    .fade-in { animation: fadeIn 0.5s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+
+  <!-- Import Map -->
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0?dev",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?dev",
+    "react-dom": "https://esm.sh/react-dom@18.2.0?dev",
+    "recharts": "https://esm.sh/recharts@2.12.3?external=react,react-dom&dev",
+    "lucide-react": "https://esm.sh/lucide-react@0.358.0?external=react,react-dom&dev",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div id="root"></div>
+
+  <!-- Application Logic -->
+  <script type="text/babel" data-type="module">
+    import React, { useState, useMemo, useEffect } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+      LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+      Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis 
+    } from 'recharts';
+    import { Download, TrendingUp, ArrowRight, Coins, Wallet, AlertCircle, Zap, Copy, Check, Calculator, BrainCircuit, RotateCcw, ChevronRight, Save, Clock, Shield, Activity, Search, Target, Award } from 'lucide-react';
+    import html2canvas from 'html2canvas';
+
+    // --- QUIZ DATA V2.0 ---
+    const QUESTIONS = [
+      // Stage 1: Time & Interest
+      { id: 1, stage: 1, dim: 'timeCommitment', text: "我每天可以投入多少時間研究市場、閱讀財經新聞?", options: ["幾乎沒有時間 (0-15分鐘)", "偶爾瀏覽 (15-30分鐘)", "有空會看 (30-45分鐘)", "固定投入 (45-60分鐘)", "深度研究 (60分鐘以上)"] },
+      { id: 2, stage: 1, dim: 'timeCommitment', text: "研究公司財報、產業趨勢和總體經濟對我來說...", options: ["非常無聊,完全不想碰", "覺得枯燥,但必要時會做", "還可以,不排斥", "蠻有趣的,願意主動學習", "非常享受,這是我的樂趣"] },
+      { id: 3, stage: 1, dim: 'timeCommitment', text: "關於投資管理,我偏好...", options: ["完全自動化,設定後不管", "偶爾檢查,但很少調整", "定期檢視,適度調整", "經常關注,主動優化", "每天監控,靈活操作"] },
+      { id: 4, stage: 1, dim: 'timeCommitment', text: "我能清楚記住每一檔持股的買入原因和當前狀況", options: ["完全不同意", "不太同意", "中立", "同意", "非常同意"] },
+      
+      // Stage 2: Risk Resilience
+      { id: 5, stage: 2, dim: 'emotionalResilience', text: "情境: 投資100萬,3個月後剩85萬 (-15%)。此時你會?", options: ["立刻全部賣出止損", "感到嚴重焦慮,考慮減碼", "有點擔心,但決定再觀察", "保持冷靜,相信長期會回升", "認為是買入機會,考慮加碼"] },
+      { id: 6, stage: 2, dim: 'emotionalResilience', text: "面對投資機會,我的態度是...", options: ["保本最重要,寧可不賺也不虧", "穩定為主,可接受小幅波動", "平衡風險與報酬", "追求較高報酬,接受較大波動", "高風險高報酬,願意承擔虧損"] },
+      { id: 7, stage: 2, dim: 'emotionalResilience', text: "投資於新興市場、高波動科技股或期權等衍生性商品,讓我感到...", options: ["極度不安,完全不考慮", "不太舒服,傾向避開", "中立,視情況而定", "有點興奮,願意嘗試", "非常興奮,這是我的首選"] },
+      { id: 8, stage: 2, dim: 'emotionalResilience', text: "如果一檔股票被證明是錯誤投資...", options: ["無法接受虧損,一直持有等解套", "很難賣出,通常會拖很久", "會賣,但需要時間說服自己", "能理性評估後果斷停損", "會立即停損,並檢討錯誤"] },
+
+      // Stage 3: Trading Habits
+      { id: 9, stage: 3, dim: 'tradingFrequency', text: "我多久會打開交易軟體查看持股價格?", options: ["幾乎不看,只在需要時才打開", "一週看 1-2 次", "每天看 1 次", "每天看 3-5 次", "每天超過 10 次,盤中隨時關注"] },
+      { id: 10, stage: 3, dim: 'tradingFrequency', text: "我通常會持有一檔股票多久?", options: ["5 年以上 (長期投資)", "1-5 年", "3-12 個月", "1-3 個月", "不到 1 個月 (短線交易)"] },
+      { id: 11, stage: 3, dim: 'tradingFrequency', text: "關於「市場擇時」(預測高低點買賣),我認為...", options: ["不可能做到,不如定期定額", "很難,但運氣好可能成功", "有時可以,有時不行", "透過技術分析可以掌握", "這是投資成功的核心能力"] },
+      { id: 12, stage: 3, dim: 'tradingFrequency', text: "我偏好的持股數量是...", options: ["20 檔以上,高度分散", "10-20 檔", "5-10 檔", "3-5 檔", "1-2 檔,高度集中"] },
+      { id: 13, stage: 3, dim: 'infoSource', text: "買入股票前,我主要參考...", options: ["財務顧問或專業投顧建議", "財經媒體和權威分析師", "綜合多方資訊自行判斷", "自己深度研究財報和產業", "量化模型和技術指標系統"] },
+      { id: 14, stage: 3, dim: 'infoSource', text: "當某檔股票連續暴漲,市場瘋狂追捧時...", options: ["會產生強烈 FOMO,立刻跟進", "有點心動,會考慮買入", "保持觀望,不急著行動", "反而更謹慎,認為風險上升", "完全不受影響,堅持自己的策略"] },
+      { id: 15, stage: 3, dim: 'infoSource', text: "我相信自己能找出市場低估的投資標的", options: ["完全不同意", "不太同意", "中立", "同意", "非常同意"] },
+      { id: 16, stage: 3, dim: 'infoSource', text: "當一檔股票大跌且新聞充滿壞消息時...", options: ["絕對不會買,風險太高", "不太敢買,傾向觀望", "視情況,需深入分析", "會考慮逆向操作", "認為是絕佳機會,積極買入"] },
+
+      // Stage 4: Goals & Discipline
+      { id: 17, stage: 4, dim: 'investmentGoal', text: "我的主要投資目標是...", options: ["保護資產,對抗通貨膨脹", "穩定增值,略高於通膨", "平衡成長,追求合理報酬", "積極成長,追求超額報酬", "實現財務自由/提早退休"] },
+      { id: 18, stage: 4, dim: 'investmentGoal', text: "關於投資收入,我更重視...", options: ["穩定配息/利息收入", "部分配息 + 部分成長", "平衡配息與資本利得", "主要追求資本利得", "完全追求資本利得,不在乎配息"] },
+      { id: 19, stage: 4, dim: 'investmentGoal', text: "對我來說,投資成功的定義是...", options: ["本金安全,略有增長", "打敗通膨,保持購買力", "達到市場平均報酬", "明顯超越大盤指數", "實現財務自由目標"] },
+      { id: 20, stage: 4, dim: 'investmentGoal', text: "如果我的年度報酬率與大盤指數相同...", options: ["非常滿意,這就是我的目標", "還算滿意,可以接受", "普通,沒有特別感覺", "有點失望,期待更好", "很不滿意,我要的是超額報酬"] },
+      { id: 21, stage: 4, dim: 'discipline', text: "過去我曾成功堅持一項長期計劃(如運動、學習)超過一年", options: ["完全沒有", "很少成功", "偶爾成功", "經常成功", "總是成功"] },
+      { id: 22, stage: 4, dim: 'discipline', text: "當投資失敗時,我會...", options: ["責怪市場/分析師/運氣不好", "部分怪自己,部分怪外部因素", "認為是經驗不足,需要學習", "深入分析自己的決策錯誤", "系統化記錄錯誤,建立改進機制"] },
+      { id: 23, stage: 4, dim: 'discipline', text: "當我感到極度貪婪或恐懼時...", options: ["會立刻衝動交易", "很難控制,通常會行動", "會猶豫,但最終還是會交易", "能等待一段時間冷靜", "能等待 24 小時以上再決定"] },
+      { id: 24, stage: 4, dim: 'discipline', text: "我會記錄自己的投資決策和績效", options: ["完全不記錄", "很少記錄", "偶爾記錄重要交易", "規律記錄大部分交易", "詳細記錄所有決策和原因"] },
+      { id: 25, stage: 4, dim: 'discipline', text: "當市場環境改變,我過去成功的策略不再有效時...", options: ["會堅持原策略,相信終會回歸", "很難改變,需要很長時間適應", "會猶豫,但最終會調整", "能較快調整策略", "能立即調整,甚至提前預判"] },
+    ];
+
+    const STYLE_TYPES = [
+      { code: 'I', name: '被動防禦型', nameEn: 'Passive Defensive', range: [20, 45], color: '#10B981', icon: '🛡️', desc: '簡單至上，不擇時、不選股。' },
+      { code: 'II', name: '平衡穩健型', nameEn: 'Balanced Conservative', range: [46, 65], color: '#3B82F6', icon: '⚖️', desc: '穩健成長，分散配置。' },
+      { code: 'III', name: '混合戰術型', nameEn: 'Hybrid Tactical', range: [66, 85], color: '#F59E0B', icon: '🎯', desc: '主動與被動混合，利用波動獲利。' },
+      { code: 'IV', name: '激進主動型', nameEn: 'Aggressive Active', range: [86, 100], color: '#EF4444', icon: '🚀', desc: '效率優先，集中持股，高槓桿操作。' },
+    ];
+
+    const DISCIPLINE_LEVELS = [
+      { code: 'L', name: '低度自律', nameEn: 'Low Discipline', range: [5, 10] },
+      { code: 'M', name: '中等自律', nameEn: 'Medium Discipline', range: [11, 15] },
+      { code: 'H', name: '高度自律', nameEn: 'High Discipline', range: [16, 20] },
+      { code: 'V', name: '極高自律', nameEn: 'Very High Discipline', range: [21, 25] },
+    ];
+
+    // Detailed Personality Content
+    const PERSONALITY_DETAILS = {
+      'I-L': { title: '恐慌指數客', tag: 'Panic Seller', advice: '強制自動化，隔絕情緒干擾。使用無法輕易贖回的帳戶，刪除看盤 APP。', portfolio: '100% 目標日期基金 或 60/40 股債配置' },
+      'I-M': { title: '隨波逐流者', tag: 'Drifter', advice: '簡化檢查頻率，每季度只看一次。設定機械式再平衡規則 (±5%)。', portfolio: '80% 全球股票 ETF + 20% 債券' },
+      'I-H': { title: '鋼鐵意志派', tag: 'Iron Will', advice: '指數化投資的理想狀態。專注費用最小化與稅務優化。', portfolio: 'VTI (全美) 或 VT (全球) + BND' },
+      'I-V': { title: '自動化典範', tag: 'Automation Model', advice: '紀律頂級，可考慮加入黃金或 REITs 優化資產配置。', portfolio: '50% 美股, 20% 國際, 20% 債券, 10% 另類資產' },
+      
+      'II-L': { title: '神經質平衡者', tag: 'Nervous Balancer', advice: '風格與紀律不匹配。建議降級策略，完全自動化，不要持有個股。', portfolio: '40% VTI + 60% BND (避險為主)' },
+      'II-M': { title: '預設設置者', tag: 'Default Setter', advice: '容易受新聞影響。建議每年固定日期再平衡，不要嘗試擇時。', portfolio: '60% VOO + 30% BND + 10% VXUS' },
+      'II-H': { title: '穩健複利者', tag: 'Steady Compounder', advice: '具備持有個股能力。建議核心衛星策略：70% ETF + 30% 優質龍頭股。', portfolio: '70% 大盤 ETF + 30% 護城河龍頭股' },
+      'II-V': { title: '錨定型投資家', tag: 'Anchored Investor', advice: '可執行進階策略，如因子投資 (價值/動能) 或動態資產配置。', portfolio: '40% VOO, 15% VTV, 15% VXUS, 20% BND, 10% VNQ' },
+      
+      'III-L': { title: '焦慮的波段客', tag: 'Anxious Trader', advice: '高風險警報！建議 80% 資金鎖在被動策略，僅用 20% 學習交易。', portfolio: '80% 鎖倉 (VTI+BND), 20% 戰術交易' },
+      'III-M': { title: '機會主義雜家', tag: 'Opportunist', advice: '交易頻率過高。建議限制每季交易次數，僅在極端訊號 (VIX>30) 時操作。', portfolio: '60% 核心持有 (SPY), 40% 戰術調整' },
+      'III-H': { title: '紀律混合操盤手', tag: 'Disciplined Hybrid', advice: '理想的核心衛星執行者。建立明確的買賣與停損手冊。', portfolio: '70% 核心 ETF, 30% 衛星 (波段/個股)' },
+      'III-V': { title: '進階核心衛星家', tag: 'Advanced Core-Satellite', advice: '可使用選擇權策略 (Covered Call/Put) 增強收益或保護下檔。', portfolio: '動態調整核心衛星比例 + 選擇權避險' },
+
+      'IV-L': { title: '衝動型交易者', tag: 'Impulsive Trader', advice: '極度危險！請立即停止槓桿與期權交易。強制降級至被動投資。', portfolio: '90% 多頭 ETF, 10% 學習資金 (嚴禁槓桿)' },
+      'IV-M': { title: '高風險賭徒', tag: 'High-Risk Gambler', advice: '獲利自信但風控不足。需設定單筆虧損上限 (2%) 與強制冷靜期。', portfolio: '分散持股，單一標的不超過 10%，保留 20% 現金' },
+      'IV-H': { title: '戰術阿爾法獵手', tag: 'Alpha Hunter', advice: '具備專業潛質。建議專注單一領域 (如技術分析或總經) 深耕。', portfolio: '專注策略 (動能/價值) + 風險平價配置' },
+      'IV-V': { title: '系統交易專家', tag: 'System Expert', advice: '主動交易的最高標準。建議開發量化系統，進行歷史回測。', portfolio: '多策略組合 (趨勢+回歸) + 量化風控' },
+    };
+
+    // --- Types (Enum simulation for JS) ---
+    const InputMode = { BTC: 'BTC', TWD: 'TWD' };
+    const Tab = { CALCULATOR: 'CALCULATOR', QUIZ: 'QUIZ' };
+
+    // --- Components: ResultChart ---
+    const ResultChart = ({ data }) => {
+      const formatCurrency = (value) => value >= 10000 ? `${(value / 10000).toFixed(0)}萬` : value.toString();
+      return (
+        <div className="w-full h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="year" label={{ value: '年數', position: 'insideBottomRight', offset: -5 }} tick={{fontSize: 12}} />
+              <YAxis tickFormatter={formatCurrency} tick={{fontSize: 12}} width={60} />
+              <Tooltip formatter={(value) => new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 }).format(value)} labelFormatter={(label) => `第 ${label} 年`} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+              <Legend verticalAlign="top" height={36} />
+              <Line type="monotone" dataKey="interest" name="年利息 (收入)" stroke="#0ea5e9" strokeWidth={3} dot={false} activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="expense" name="當年生活費 (支出)" stroke="#ef4444" strokeWidth={3} strokeDasharray="5 5" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    };
+
+    // --- Components: DonationSection ---
+    const DonationSection = () => {
+      const [copied, setCopied] = useState(false);
+      const address = "TRrveGuEdkq9v64ecmgfyQp3eh1dRuyEYM";
+      const handleCopy = () => {
+        navigator.clipboard.writeText(address).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(err => console.error(err));
+      };
+      return (
+        <section className="mt-16 py-12 px-6 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl text-white shadow-2xl text-center relative overflow-hidden isolate group">
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl group-hover:bg-emerald-500/30 transition-all duration-1000"></div>
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-blue-600/20 rounded-full blur-3xl group-hover:bg-blue-600/30 transition-all duration-1000"></div>
+          <div className="relative z-10 flex flex-col items-center max-w-lg mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-emerald-300 text-xs font-bold tracking-wider uppercase mb-6 backdrop-blur-sm"><Zap size={12} fill="currentColor" /> Support Development</div>
+            <h2 className="mb-3 text-2xl md:text-3xl font-bold tracking-tight text-white">覺得這個工具有幫助嗎？</h2>
+            <p className="mb-8 text-slate-400 text-sm md:text-base leading-relaxed">您的打賞將成為開發者的燃料 ⛽️<br/>幫助我持續維護並開發更多免費的投資試算工具。</p>
+            <div className="w-full bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-1 shadow-2xl transform transition-all hover:scale-[1.01] duration-300">
+              <div className="bg-slate-900/80 rounded-xl p-6 border border-white/5">
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center gap-2 text-slate-300 font-semibold mb-6"><div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400"><Wallet size={16} /></div><span>USDT Donation</span><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">TRC20</span></div>
+                  <div className="p-4 bg-white rounded-2xl shadow-lg mb-6"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${address}&bgcolor=ffffff&color=000000&margin=0`} alt="USDT TRC20 QR Code" className="w-40 h-40 md:w-48 md:h-48 object-contain rendering-pixelated" /></div>
+                  <div className="w-full max-w-sm space-y-2">
+                    <div className="flex justify-between text-xs text-slate-500 px-1"><span>Wallet Address (Tron Network)</span></div>
+                    <div className="relative group/input">
+                      <div onClick={handleCopy} className="flex items-center justify-between w-full bg-slate-950 border border-slate-800 rounded-xl p-3 pr-2 cursor-pointer hover:border-emerald-500/50 hover:bg-slate-900 transition-all duration-200 group/btn">
+                        <code className="text-xs sm:text-sm text-slate-300 font-mono truncate select-all mr-2">{address}</code>
+                        <button className={`flex-shrink-0 p-2 rounded-lg transition-all duration-300 ${copied ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-slate-800 text-slate-400 group-hover/btn:bg-slate-700 group-hover/btn:text-white'}`}>{copied ? <Check size={16} strokeWidth={3} /> : <Copy size={16} />}</button>
+                      </div>
+                      <div className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg transform transition-all duration-300 flex items-center gap-1 ${copied ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}><Check size={12} /> 已複製地址</div>
+                    </div>
+                    <p className="text-[10px] text-slate-600 text-center mt-2">* 請務必使用 <span className="text-emerald-500/80">TRC20 (Tron)</span> 鏈進行轉帳，以免資產遺失。</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    };
+
+    // --- Components: Quiz V2.0 ---
+    const Quiz = () => {
+      const [started, setStarted] = useState(false);
+      const [currentQ, setCurrentQ] = useState(0);
+      const [scores, setScores] = useState({});
+      const [finished, setFinished] = useState(false);
+      const [stage, setStage] = useState(1);
+
+      // Load progress
+      useEffect(() => {
+        const saved = localStorage.getItem('investmentAssessment');
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            // Resume if within 24 hours
+            if (Date.now() - data.timestamp < 86400000) {
+              setScores(data.answers);
+              setCurrentQ(Object.keys(data.answers).length);
+              if (Object.keys(data.answers).length >= QUESTIONS.length) {
+                setFinished(true);
+              } else {
+                setStarted(true);
+              }
+            }
+          } catch(e) { console.error("Load failed", e); }
+        }
+      }, []);
+
+      // Save progress
+      useEffect(() => {
+        if (Object.keys(scores).length > 0) {
+          localStorage.setItem('investmentAssessment', JSON.stringify({
+            timestamp: Date.now(),
+            answers: scores
+          }));
+        }
+      }, [scores]);
+
+      const handleAnswer = (value) => {
+        setScores(prev => ({ ...prev, [QUESTIONS[currentQ].id]: value }));
+        
+        // Update Stage based on next Question
+        if (currentQ < QUESTIONS.length - 1) {
+          const nextQ = QUESTIONS[currentQ + 1];
+          if (nextQ.stage !== QUESTIONS[currentQ].stage) {
+            // Stage Transition Effect could go here
+            setStage(nextQ.stage);
+          }
+          setCurrentQ(prev => prev + 1);
+        } else {
+          setFinished(true);
+        }
+      };
+
+      const calculateResult = () => {
+        const dims = {
+          timeCommitment: 0,
+          emotionalResilience: 0,
+          tradingFrequency: 0,
+          infoSource: 0,
+          investmentGoal: 0,
+          discipline: 0
+        };
+
+        // Sum raw scores (1-5)
+        QUESTIONS.forEach(q => {
+          const raw = scores[q.id] || 3; 
+          if (dims[q.dim] !== undefined) dims[q.dim] += raw;
+        });
+
+        // Style Score (Sum of first 5 dims)
+        const styleScore = dims.timeCommitment + dims.emotionalResilience + dims.tradingFrequency + dims.infoSource + dims.investmentGoal;
+        
+        // Discipline Score (Dim 6)
+        const disciplineScore = dims.discipline;
+
+        // Determine Type
+        const styleType = STYLE_TYPES.find(t => styleScore >= t.range[0] && styleScore <= t.range[1]) || STYLE_TYPES[1];
+        const disciplineLevel = DISCIPLINE_LEVELS.find(l => disciplineScore >= l.range[0] && disciplineScore <= l.range[1]) || DISCIPLINE_LEVELS[1];
+
+        const resultId = `${styleType.code}-${disciplineLevel.code}`;
+        const detail = PERSONALITY_DETAILS[resultId] || PERSONALITY_DETAILS['II-H'];
+
+        // Radar Data
+        const radarData = [
+          { subject: '時間投入', A: dims.timeCommitment, fullMark: 20 },
+          { subject: '情緒韌性', A: dims.emotionalResilience, fullMark: 20 },
+          { subject: '交易頻率', A: dims.tradingFrequency, fullMark: 20 },
+          { subject: '資訊來源', A: dims.infoSource, fullMark: 20 },
+          { subject: '投資目標', A: dims.investmentGoal, fullMark: 20 },
+          { subject: '執行紀律', A: dims.discipline, fullMark: 25 },
+        ];
+
+        return { styleScore, disciplineScore, styleType, disciplineLevel, detail, radarData };
+      };
+
+      const resetQuiz = () => {
+        localStorage.removeItem('investmentAssessment');
+        setStarted(false);
+        setCurrentQ(0);
+        setScores({});
+        setFinished(false);
+        setStage(1);
+      };
+
+      const handleDownload = async () => {
+        const element = document.getElementById('report-card');
+        const btnText = document.getElementById('btn-text');
+        if (!element) return;
+        
+        if (btnText) btnText.innerText = "生成中...";
+        
+        try {
+            await new Promise(r => setTimeout(r, 100)); // Delay to ensure render
+            
+            const canvas = await html2canvas(element, { 
+                scale: 2,
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false
+            });
+            const link = document.createElement('a');
+            link.download = `InvestorFuji_Report_${new Date().getTime()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        } catch (e) {
+            console.error(e);
+            alert("下載圖片失敗，將為您開啟列印模式，請選擇「另存為 PDF」。");
+            window.print();
+        } finally {
+            if (btnText) btnText.innerText = "儲存報告 (圖片)";
+        }
+      };
+
+      if (!started) {
+        return (
+          <div className="max-w-2xl mx-auto py-12 text-center fade-in">
+            <div className="w-24 h-24 bg-blue-100 text-blue-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg border-4 border-white">
+              <BrainCircuit size={48} />
+            </div>
+            <h2 className="text-3xl font-extrabold text-slate-900 mb-2">發現你的投資 DNA</h2>
+            <p className="text-amber-500 font-bold mb-6 text-sm tracking-wider uppercase">8 分鐘科學化評估 V2.0</p>
+            <p className="text-slate-600 mb-10 text-lg leading-relaxed max-w-lg mx-auto">
+              這不是普通的心理測驗。<br/>
+              我們透過 25 道專業情境題，分析您的 6 大投資維度，<br/>
+              為您生成專屬的投資策略報告。
+            </p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-10 max-w-md mx-auto">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+                <Target size={24} className="text-blue-600 mb-2"/>
+                <span className="font-bold text-slate-800">16 種人格</span>
+                <span className="text-xs text-slate-400">精準分類</span>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
+                <Activity size={24} className="text-amber-500 mb-2"/>
+                <span className="font-bold text-slate-800">6 維度分析</span>
+                <span className="text-xs text-slate-400">雷達圖報告</span>
+              </div>
+            </div>
+
+            <button onClick={() => setStarted(true)} className="px-10 py-4 bg-blue-900 text-white text-lg font-bold rounded-full shadow-xl hover:shadow-2xl hover:bg-blue-800 transition-all transform hover:-translate-y-1 ring-4 ring-blue-100">
+              開始測驗
+            </button>
+            <p className="mt-6 text-xs text-slate-400">已有 12,847 人完成測評</p>
+          </div>
+        );
+      }
+
+      if (finished) {
+        const { styleType, disciplineLevel, detail, radarData } = calculateResult();
+        return (
+          <div className="max-w-4xl mx-auto py-4 md:py-8 fade-in">
+            {/* Wrap the report content in a specific ID for capture */}
+            <div id="report-card" className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+              {/* Header */}
+              <div className="relative bg-slate-900 text-white p-8 md:p-12 overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                <div className="relative z-10 text-center">
+                  <div className="inline-block px-4 py-1.5 bg-white/10 backdrop-blur rounded-full text-xs font-bold text-amber-400 mb-6 border border-white/10">
+                    測評報告 #2024-{Math.floor(Math.random()*10000)}
+                  </div>
+                  <h2 className="text-3xl md:text-5xl font-extrabold mb-4 tracking-tight">
+                    {styleType.name} <span className="text-amber-500">×</span> {disciplineLevel.name}
+                  </h2>
+                  <p className="text-slate-400 text-lg font-medium">{styleType.nameEn} × {disciplineLevel.nameEn}</p>
+                  
+                  <div className="mt-8 inline-flex items-center gap-2 bg-white/10 px-6 py-3 rounded-2xl backdrop-blur-sm border border-white/10">
+                    <span className="text-2xl">{styleType.icon}</span>
+                    <span className="font-bold">代表人物：{detail.title}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-0">
+                {/* Radar Chart */}
+                <div className="md:col-span-5 bg-slate-50 p-6 md:p-8 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">六維度分析</h3>
+                  <div className="w-full h-[250px] md:h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 25]} tick={false} axisLine={false} />
+                        <Radar name="My Score" dataKey="A" stroke="#3b82f6" strokeWidth={3} fill="#3b82f6" fillOpacity={0.2} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="md:col-span-7 p-8 space-y-8">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Target className="text-blue-600" size={20} />
+                      核心特徵
+                    </h3>
+                    <p className="text-slate-600 leading-relaxed bg-blue-50 p-4 rounded-xl border border-blue-100">
+                      {styleType.desc} 您的紀律等級為 <strong className="text-blue-800">{disciplineLevel.name}</strong>。
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Shield className="text-amber-500" size={20} />
+                      專屬建議
+                    </h3>
+                    <p className="text-slate-700 leading-relaxed">
+                      {detail.advice}
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
+                      <Wallet className="text-emerald-500" size={20} />
+                      推薦配置
+                    </h3>
+                    <div className="bg-slate-900 text-slate-300 p-5 rounded-xl font-mono text-sm border border-slate-800 shadow-inner">
+                      {detail.portfolio}
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex flex-col md:flex-row gap-4" data-html2canvas-ignore>
+                    <button onClick={resetQuiz} className="flex-1 inline-flex justify-center items-center gap-2 px-6 py-3 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors">
+                      <RotateCcw size={18} /> 重測
+                    </button>
+                    <button 
+                      onClick={handleDownload} 
+                      id="download-btn"
+                      className="flex-1 inline-flex justify-center items-center gap-2 px-6 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
+                    >
+                      <Download size={18} /> 
+                      <span id="btn-text">儲存報告 (圖片)</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const q = QUESTIONS[currentQ];
+      const progress = ((currentQ + 1) / QUESTIONS.length) * 100;
+      const stageInfo = [
+        { id: 1, name: "時間與興趣" },
+        { id: 2, name: "風險承受" },
+        { id: 3, name: "交易習慣" },
+        { id: 4, name: "目標紀律" }
+      ];
+
+      return (
+        <div className="max-w-2xl mx-auto py-8 fade-in">
+          {/* Header Progress */}
+          <div className="mb-8">
+            <div className="flex justify-between items-end mb-4">
+              <div>
+                <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-wider mb-1 inline-block">Stage {q.stage}</span>
+                <h3 className="text-lg font-bold text-slate-900">{stageInfo[q.stage-1].name}</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl font-extrabold text-slate-900">{currentQ + 1}</span>
+                <span className="text-slate-400 font-medium">/{QUESTIONS.length}</span>
+              </div>
+            </div>
+            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
+            </div>
+          </div>
+
+          {/* Question Card */}
+          <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl border border-slate-100 mb-8 min-h-[280px] flex flex-col justify-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -mr-10 -mt-10 z-0"></div>
+            <h3 className="relative z-10 text-xl md:text-2xl font-bold text-slate-900 leading-snug mb-2">
+              {q.text}
+            </h3>
+            <div className="mt-4 relative z-10 flex gap-2">
+              <span className={`h-1 w-10 rounded-full ${q.stage === 1 ? 'bg-blue-500' : 'bg-slate-200'}`}></span>
+              <span className={`h-1 w-10 rounded-full ${q.stage === 2 ? 'bg-blue-500' : 'bg-slate-200'}`}></span>
+              <span className={`h-1 w-10 rounded-full ${q.stage === 3 ? 'bg-blue-500' : 'bg-slate-200'}`}></span>
+              <span className={`h-1 w-10 rounded-full ${q.stage === 4 ? 'bg-blue-500' : 'bg-slate-200'}`}></span>
+            </div>
+          </div>
+
+          {/* Options */}
+          <div className="space-y-3">
+            {q.options.map((opt, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleAnswer(idx + 1)}
+                className="group w-full text-left p-4 md:p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all duration-200 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 font-bold flex items-center justify-center text-sm border border-slate-200 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-colors">
+                    {String.fromCharCode(65 + idx)}
+                  </div>
+                  <span className="font-medium text-slate-700 group-hover:text-slate-900">{opt}</span>
+                </div>
+                <ChevronRight className="text-slate-300 group-hover:text-blue-500 transition-colors" size={20} />
+              </button>
+            ))}
+          </div>
+          
+          <div className="mt-8 text-center">
+            <button onClick={resetQuiz} className="text-slate-400 text-xs hover:text-slate-600 underline">重置進度</button>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Main App Component ---
+    const App = () => {
+      // --- State ---
+      const [activeTab, setActiveTab] = useState(Tab.CALCULATOR);
+      const [state, setState] = useState({
+        age: 30,
+        horizon: 25,
+        mode: InputMode.BTC,
+        returnPct: 15,
+        expenseNow: 100000,
+        inflationPct: 3,
+        btcAmount: 0.10,
+        btcPriceTWD: 3000000,
+        initialTWD: 600000,
+        monthlyContribution: 10000,
+      });
+
+      // --- Handlers ---
+      const handleChange = (field, value) => {
+        setState(prev => ({
+          ...prev,
+          [field]: typeof value === 'string' ? (Number(value) || 0) : value
+        }));
+      };
+
+      const handleModeChange = (mode) => {
+        setState(prev => ({ ...prev, mode }));
+      };
+
+      // --- Calculation Logic ---
+      const calculation = useMemo(() => {
+        const {
+          age, horizon, mode, returnPct, expenseNow,
+          inflationPct, btcAmount, btcPriceTWD,
+          initialTWD, monthlyContribution
+        } = state;
+
+        const principal = mode === InputMode.BTC 
+          ? btcAmount * btcPriceTWD 
+          : initialTWD;
+        
+        const rate = returnPct / 100;
+        const inflation = inflationPct / 100;
+
+        const rows = [];
+        let breakEvenRow = null;
+
+        if (mode === InputMode.BTC) {
+          let currentBtc = btcAmount;
+          let currentPrice = btcPriceTWD;
+
+          for (let year = 1; year <= horizon; year++) {
+            const startPrice = currentPrice;
+            const endPrice = startPrice * (1 + rate);
+            
+            const totalAnnualContribution = monthlyContribution * 12;
+            const btcPurchasedThisYear = totalAnnualContribution / startPrice;
+
+            const totalBtcAfterPurchase = currentBtc + btcPurchasedThisYear;
+            const valueEnd = totalBtcAfterPurchase * endPrice;
+            const valueStart = currentBtc * startPrice; 
+            
+            const interest = valueEnd - valueStart - totalAnnualContribution;
+
+            currentBtc = totalBtcAfterPurchase;
+            currentPrice = endPrice;
+            
+            const expense = expenseNow * Math.pow(1 + inflation, year - 1);
+            const diff = interest - expense;
+            const isBreakEven = diff >= 0;
+
+            const row = {
+              year,
+              age: age + year,
+              interest,
+              expense,
+              valueEnd,
+              diff,
+              isBreakEven,
+              btcHoldings: currentBtc
+            };
+            
+            rows.push(row);
+            if (isBreakEven && !breakEvenRow) breakEvenRow = row;
+          }
+        } else {
+          // TWD Mode
+          let valuePrev = principal;
+          
+          for (let year = 1; year <= horizon; year++) {
+            const totalAnnualContribution = monthlyContribution * 12;
+            const valueEnd = (valuePrev + totalAnnualContribution) * (1 + rate);
+            
+            const interest = valueEnd - valuePrev - totalAnnualContribution;
+            
+            const expense = expenseNow * Math.pow(1 + inflation, year - 1);
+            const diff = interest - expense;
+            const isBreakEven = diff >= 0;
+
+            const row = {
+              year,
+              age: age + year,
+              interest,
+              expense,
+              valueEnd,
+              diff,
+              isBreakEven
+            };
+
+            rows.push(row);
+            valuePrev = valueEnd;
+            if (isBreakEven && !breakEvenRow) breakEvenRow = row;
+          }
+        }
+
+        return { principal, rows, breakEvenRow };
+      }, [state]);
+
+      // --- Formatters ---
+      const fmt = (n) => new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 }).format(n);
+      const fmtBtc = (n) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
+
+      // --- Export CSV ---
+      const handleExport = () => {
+        const isBtc = state.mode === InputMode.BTC;
+        const header = ['年', '年齡', '年利息(TWD)', '當年生活費(TWD)', '期末資產(TWD)', '差額'];
+        if (isBtc) header.splice(2, 0, '持有BTC(顆)');
+
+        const csvContent = [
+          header.join(','),
+          ...calculation.rows.map(r => {
+            const base = [r.year, r.age];
+            if (isBtc) base.push(r.btcHoldings?.toFixed(4) || '0');
+            base.push(Math.round(r.interest).toString());
+            base.push(Math.round(r.expense).toString());
+            base.push(Math.round(r.valueEnd).toString());
+            base.push(Math.round(r.diff).toString());
+            return base.join(',');
+          })
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'Investor_Fuji_Calculation.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Header */}
+          <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <img 
+                  src="logo.png" 
+                  alt="Logo" 
+                  className="h-10 w-auto rounded-xl shadow-sm"
+                />
+                <div>
+                  <h1 className="text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                    Investor Fuji
+                  </h1>
+                  <p className="text-xs text-slate-500 font-medium">通膨 vs. 投資利息 · 工具原型</p>
+                </div>
+              </div>
+              
+              {/* Navigation Tabs */}
+              <div className="flex p-1.5 bg-slate-100 rounded-xl">
+                <button
+                  onClick={() => setActiveTab(Tab.CALCULATOR)}
+                  className={`px-5 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                    activeTab === Tab.CALCULATOR 
+                      ? 'bg-white text-blue-900 shadow-sm ring-1 ring-black/5' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Calculator size={16} />
+                  計算器
+                </button>
+                <button
+                  onClick={() => setActiveTab(Tab.QUIZ)}
+                  className={`px-5 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
+                    activeTab === Tab.QUIZ 
+                      ? 'bg-white text-amber-600 shadow-sm ring-1 ring-black/5' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <BrainCircuit size={16} />
+                  投資屬性測驗
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-8">
+            
+            {activeTab === Tab.QUIZ ? (
+              <Quiz />
+            ) : (
+              // --- Calculator View ---
+              <div className="fade-in">
+                {/* Hero Title */}
+                <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+                  <div>
+                    <h2 className="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">
+                      通膨 vs. 投資利息 計算器
+                    </h2>
+                    <p className="text-slate-600 max-w-2xl">
+                      輸入生活費與通膨、投入本金與年化，找出「利息 ≥ 當年生活費」的年份。
+                    </p>
+                  </div>
+                  <div className="text-xs font-medium text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
+                    Ver 2.3 Simple Annual Calc
+                  </div>
+                </div>
+
+                {/* Input Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {/* Age */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">目前年齡</label>
+                    <input 
+                      type="number" 
+                      value={state.age}
+                      onChange={(e) => handleChange('age', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                    />
+                  </div>
+
+                  {/* Horizon */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">試算年數</label>
+                    <input 
+                      type="number" 
+                      value={state.horizon}
+                      onChange={(e) => handleChange('horizon', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                    />
+                  </div>
+
+                  {/* Mode */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">輸入資金模式</label>
+                    <select 
+                      value={state.mode}
+                      onChange={(e) => handleModeChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900 appearance-none cursor-pointer"
+                    >
+                      <option value={InputMode.BTC}>以 BTC 數量 + 價格</option>
+                      <option value={InputMode.TWD}>以台幣金額</option>
+                    </select>
+                  </div>
+
+                  {/* Return Rate */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-4 -mt-4 z-0"></div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 relative z-10">年化報酬率 (%)</label>
+                    <div className="relative z-10">
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        value={state.returnPct}
+                        onChange={(e) => handleChange('returnPct', e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition-all font-bold text-green-700"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Financials Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* Expense */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">目前年生活費 (TWD)</label>
+                    <input 
+                      type="number"
+                      value={state.expenseNow}
+                      onChange={(e) => handleChange('expenseNow', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                    />
+                  </div>
+
+                  {/* Inflation */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">年通膨率 (%)</label>
+                    <input 
+                      type="number"
+                      step="0.1"
+                      value={state.inflationPct}
+                      onChange={(e) => handleChange('inflationPct', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 transition-all font-medium text-red-600"
+                    />
+                  </div>
+
+                  {/* Principal Calculation Display */}
+                  <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-sm text-white flex flex-col justify-between">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">初始本金 (試算)</label>
+                    <div className="flex items-end justify-between">
+                      <span className="text-xs bg-slate-800 px-2 py-1 rounded text-slate-300 font-mono">{state.mode}</span>
+                      <div className="text-2xl font-bold tracking-tight">
+                        <span className="text-sm text-slate-400 font-normal mr-1">TWD</span>
+                        {fmt(calculation.principal)}
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      {state.mode === InputMode.BTC ? '依「顆數 × 單價」自動換算' : '手動輸入之金額'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Capital Input Section (Initial + DCA) */}
+                <h3 className="text-sm font-bold text-slate-500 mb-3 flex items-center gap-2">
+                  <Wallet size={16} />
+                  資金投入設定
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  
+                  {/* Mode Specific Initial Input */}
+                  {state.mode === InputMode.BTC ? (
+                    <>
+                      <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 shadow-sm">
+                        <label className="block text-xs font-semibold text-orange-800/70 uppercase tracking-wider mb-2">初始持有 BTC 數量</label>
+                        <input 
+                          type="number"
+                          step="0.01"
+                          value={state.btcAmount}
+                          onChange={(e) => handleChange('btcAmount', e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all font-bold text-slate-900"
+                        />
+                      </div>
+                      <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 shadow-sm">
+                        <label className="block text-xs font-semibold text-orange-800/70 uppercase tracking-wider mb-2">BTC 單價 (TWD)</label>
+                        <input 
+                          type="number"
+                          value={state.btcPriceTWD}
+                          onChange={(e) => handleChange('btcPriceTWD', e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all font-medium text-slate-900"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm md:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">初始投入金額 (TWD)</label>
+                      <input 
+                        type="number"
+                        value={state.initialTWD}
+                        onChange={(e) => handleChange('initialTWD', e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                      />
+                    </div>
+                  )}
+
+                  {/* DCA Input */}
+                  <div className="bg-sky-50 p-5 rounded-2xl border border-sky-100 shadow-sm md:col-span-2">
+                    <label className="block text-xs font-semibold text-sky-700/70 uppercase tracking-wider mb-2 flex items-center gap-1">
+                      每月定投金額 (TWD)
+                      <span className="bg-sky-200 text-sky-800 text-[10px] px-1.5 py-0.5 rounded-full">NEW</span>
+                    </label>
+                    <div className="flex gap-2 items-center">
+                      <input 
+                        type="number"
+                        value={state.monthlyContribution}
+                        onChange={(e) => handleChange('monthlyContribution', e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-sky-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all font-medium text-slate-900"
+                      />
+                      <div className="text-xs text-sky-600/60 min-w-[60px] leading-tight">
+                        {state.mode === InputMode.BTC ? '自動換算累計 BTC' : '每月持續買入'}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="border-t border-slate-200 my-8"></div>
+
+                {/* Results Summary */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                  {/* Break Even Box */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-100 overflow-hidden relative">
+                    <div className={`h-1 w-full absolute top-0 left-0 ${calculation.breakEvenRow ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                    <div className="p-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={`p-1.5 rounded-lg ${calculation.breakEvenRow ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          <TrendingUp size={18} />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-700">財務自由突破年份</h3>
+                      </div>
+                      
+                      {calculation.breakEvenRow ? (
+                        <>
+                          <div className="text-3xl font-extrabold text-slate-900 mb-1">
+                            第 {calculation.breakEvenRow.year} 年
+                            <span className="text-lg text-slate-500 font-medium ml-2">({calculation.breakEvenRow.age} 歲)</span>
+                          </div>
+                          <div className="space-y-1 mt-4">
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>當年利息收入 (含增值)</span>
+                              <span className="font-semibold text-emerald-600">TWD {fmt(calculation.breakEvenRow.interest)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-slate-500">
+                              <span>當年生活費</span>
+                              <span className="font-semibold text-red-500">TWD {fmt(calculation.breakEvenRow.expense)}</span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-slate-400 py-4">
+                          <p className="text-xl font-semibold">尚未達成</p>
+                          <p className="text-sm mt-1">試著增加本金、提高報酬率或延長年限。</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Year 1 Reference */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                    <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      第 1 年參考數據
+                    </h3>
+                    {calculation.rows.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                          <span className="text-sm text-slate-500">預估利息</span>
+                          <span className="text-base font-bold text-slate-900">{fmt(calculation.rows[0].interest)}</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
+                          <span className="text-sm text-slate-500">生活費</span>
+                          <span className="text-base font-bold text-slate-900">{fmt(calculation.rows[0].expense)}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                          <span className="text-sm text-slate-500">差額</span>
+                          <span className={`text-lg font-extrabold ${calculation.rows[0].diff >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {calculation.rows[0].diff > 0 ? '+' : ''}{fmt(calculation.rows[0].diff)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Card */}
+                  <div className="bg-slate-50 rounded-2xl border border-slate-200 border-dashed p-6 flex flex-col items-center justify-center text-center">
+                    <div className="mb-4 text-slate-400">
+                      <Download size={32} className="mx-auto mb-2 opacity-50" />
+                      <p className="text-xs max-w-[200px]">下載 CSV 格式的詳細逐年數據 (含累積資產明細)</p>
+                    </div>
+                    <button 
+                      onClick={handleExport}
+                      className="w-full py-3 px-4 bg-white border border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download size={16} />
+                      匯出 CSV 報表
+                    </button>
+                  </div>
+                </div>
+
+                {/* Chart Section */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-100/50 p-6 mb-8">
+                  <h3 className="text-lg font-bold text-slate-800 mb-6">資產增長趨勢</h3>
+                  <ResultChart data={calculation.rows} />
+                </div>
+
+                {/* Table Section */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800">詳細數據表</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                      <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
+                        <tr>
+                          <th className="px-6 py-4">年</th>
+                          <th className="px-6 py-4">年齡</th>
+                          {state.mode === InputMode.BTC && (
+                            <th className="px-6 py-4 text-orange-600 flex items-center gap-1">
+                              <Coins size={14} />
+                              持有 BTC (顆)
+                            </th>
+                          )}
+                          <th className="px-6 py-4 text-right">年利息 (TWD)</th>
+                          <th className="px-6 py-4 text-right">當年生活費 (TWD)</th>
+                          <th className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-1 group/header cursor-help">
+                              <span>期末資產 (TWD)</span>
+                              <div className="relative">
+                                <AlertCircle size={14} className="text-slate-400 hover:text-slate-600 transition-colors" />
+                                <div className="absolute right-0 top-full mt-2 w-64 p-3 bg-slate-900 text-slate-50 text-xs rounded-lg shadow-xl opacity-0 invisible group-hover/header:opacity-100 group-hover/header:visible transition-all z-20 font-normal text-left tracking-normal">
+                                  {state.mode === InputMode.BTC ? (
+                                    <div>
+                                      <div className="font-bold text-orange-300 mb-1">BTC 模式計算方式</div>
+                                      <div>總資產 ＝ (累積持有顆數) × (年末單價)</div>
+                                      <div className="mt-1 text-slate-400 border-t border-slate-700 pt-1">
+                                        為方便快速估算，假設每月定投金額於「年初一次性投入」，故整年定投總額皆享有完整的年度漲幅。
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div className="font-bold text-sky-300 mb-1">台幣模式計算方式</div>
+                                      <div>總資產 ＝ (上期餘額 ＋ 年定投總額) × (1 ＋ 年化報酬率)</div>
+                                      <div className="mt-1 text-slate-400 border-t border-slate-700 pt-1">
+                                        為方便快速估算，假設每月定投金額於「年初一次性投入」，故整年定投總額皆享有完整的年度複利。
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="absolute bottom-full right-1 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-slate-900"></div>
+                                </div>
+                              </div>
+                            </div>
+                          </th>
+                          <th className="px-6 py-4 text-right">差額</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {calculation.rows.map((row) => (
+                          <tr 
+                            key={row.year} 
+                            className={`hover:bg-slate-50 transition-colors ${row.isBreakEven && row.year === calculation.breakEvenRow?.year ? 'bg-emerald-50/60' : ''}`}
+                          >
+                            <td className="px-6 py-4 font-medium text-slate-900">
+                              {row.year}
+                              {row.isBreakEven && row.year === calculation.breakEvenRow?.year && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                                  達成
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">{row.age}</td>
+                            
+                            {state.mode === InputMode.BTC && (
+                              <td className="px-6 py-4 font-mono text-orange-600 font-semibold">
+                                {fmtBtc(row.btcHoldings || 0)}
+                              </td>
+                            )}
+
+                            <td className="px-6 py-4 text-right font-medium text-sky-600">{fmt(row.interest)}</td>
+                            <td className="px-6 py-4 text-right text-slate-500">{fmt(row.expense)}</td>
+                            <td className="px-6 py-4 text-right text-slate-900 font-medium">{fmt(row.valueEnd)}</td>
+                            <td className={`px-6 py-4 text-right font-bold ${row.diff >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              {row.diff > 0 ? '+' : ''}{fmt(row.diff)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DonationSection />
+            
+            <footer className="mt-12 text-center text-xs text-slate-400 pb-8">
+              <p className="mb-2">
+                <b>說明</b>：利息＝期末資產 - 期初資產 - 當年投入本金；生活費＝現在生活費×(1+通膨)^(年數-1)。
+              </p>
+              <p className="mb-2">
+                定投計算採用簡化算法：假設每月定投金額於「年初一次性投入」，直接享有整年完整複利。
+              </p>
+              <p>本工具為教育試算，未含稅務、費用、風險與價格波動，不構成投資建議。</p>
+              <p className="mt-4 opacity-50">© 2024 Investor Fuji</p>
+            </footer>
+
+          </main>
+        </div>
+      );
+    };
+
+    // --- Initialization ---
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
